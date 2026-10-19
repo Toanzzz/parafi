@@ -12,7 +12,7 @@ Combine Para's wallet infrastructure with [Walrus Memory](https://docs.wal.app/w
 * Store and recall agent memory across sessions
 * Revoke an agent's access from the Para wallet
 
-This walkthrough covers two integration paths: **user-owned memory**, where each user's Para wallet owns their memory account, and **app-managed memory**, where your app owns one account and keeps a separate namespace for each Para user.
+This walkthrough covers two integration paths: **app-managed memory**, where your app owns one account and keeps a separate namespace for each Para user, and **user-owned memory**, where each user's Para wallet owns their memory account.
 
 ## Why Combine Para and Walrus Memory
 
@@ -54,7 +54,101 @@ MEMWAL_REGISTRY_ID=0x8bf82c9e09e36b8d1c38298f68b7cb68e7b8762887e7592add9986d5e9c
 
 ## Step-by-Step Integration
 
+Start with app-managed memory. Choose user-owned memory when users must own their memory and control which agents can use it.
+
+<Accordion title="Compare the two paths">
+  | | App-managed memory | User-owned memory |
+  | - | - | - |
+  | Account owner | Your app | Each user's Para Sui wallet |
+  | Gas | Users pay nothing | Each user's wallet pays about 0.005 SUI |
+  | Isolation between users | Namespaces, enforced by your server | Separate accounts, enforced onchain |
+  | Who revokes an agent | Your app | The user, from their Para wallet |
+</Accordion>
+
 <Tabs>
+  <Tab title="App-Managed Memory">
+    Your app owns one Walrus Memory account and keeps a separate namespace for each Para user. Users don't sign any Sui transactions or hold SUI.
+
+    ### Step 1: Install Dependencies
+
+    <CodeGroup>
+      ```bash npm
+      npm install @mysten-incubation/memwal @mysten/sui @mysten/seal jose
+      ```
+
+      ```bash yarn
+      yarn add @mysten-incubation/memwal @mysten/sui @mysten/seal jose
+      ```
+
+      ```bash pnpm
+      pnpm add @mysten-incubation/memwal @mysten/sui @mysten/seal jose
+      ```
+
+      ```bash bun
+      bun add @mysten-incubation/memwal @mysten/sui @mysten/seal jose
+      ```
+    </CodeGroup>
+
+    ### Step 2: Create an Account and Delegate Key
+
+    Create your app's account and a delegate key once on the [Walrus Memory dashboard](https://memory.walrus.xyz). Store both values as server-side secrets:
+
+    ```bash
+    MEMWAL_PRIVATE_KEY=<delegate-private-key-hex>
+    MEMWAL_ACCOUNT_ID=0x<memwal-account-object-id>
+    ```
+
+    `MEMWAL_ACCOUNT_ID` is the account's object ID, not the address of the wallet that owns it. With the owner address, the relayer rejects every request with `401`.
+
+    ### Step 3: Map Each Para User to a Namespace
+
+    Verify the user's [Para session JWT](https://docs.getpara.com/v3/react/guides/sessions-jwt) on your server, then derive the namespace from the verified user ID. `PARA_API_KEY_ID` is the `aud` claim of your app's session tokens. Decode one to read it:
+
+    ```typescript
+    import { createRemoteJWKSet, jwtVerify } from "jose";
+
+    const PARA_JWKS = createRemoteJWKSet(
+      new URL("https://api.beta.getpara.com/.well-known/jwks.json"), // BETA; use api.getpara.com in PROD
+    );
+
+    // Resolve the Para user from a verified session token, never from the request body
+    async function namespaceFor(paraJwt: string) {
+      const { payload } = await jwtVerify(paraJwt, PARA_JWKS, {
+        audience: process.env.PARA_API_KEY_ID!, // the token's aud claim is your Para API key's ID
+      });
+      return `myapp-${payload.sub}`;
+    }
+    ```
+
+    <Warning>
+      Namespaces organize data. They don't isolate users from each other, because your delegate key can read every namespace in the account. Always derive the namespace from a verified Para session.
+    </Warning>
+
+    ### Step 4: Remember and Recall per User
+
+    ```typescript
+    import { MemWal } from "@mysten-incubation/memwal";
+
+    const memwal = MemWal.create({
+      key: process.env.MEMWAL_PRIVATE_KEY!,
+      accountId: process.env.MEMWAL_ACCOUNT_ID!,
+      serverUrl: "https://relayer.memory.walrus.xyz",
+    });
+
+    const namespace = await namespaceFor(paraJwt); // paraJwt from the request's Authorization header
+
+    await memwal.rememberAndWait("Prefers payouts in USDC on Base.", namespace);
+
+    const { results } = await memwal.recall({
+      query: "What are this user's payout preferences?",
+      namespace,
+      limit: 5,
+    });
+    ```
+
+    For a full multi-user example, see the [multi-tenant cookbook](https://docs.wal.app/walrus-memory/sdk/cookbook-multi-tenant).
+  </Tab>
+
   <Tab title="User-Owned Memory">
     The user's Para Sui wallet owns a Walrus Memory account. Your agent backend holds a delegate key that the user authorizes and can revoke at any time.
 
@@ -224,89 +318,6 @@ MEMWAL_REGISTRY_ID=0x8bf82c9e09e36b8d1c38298f68b7cb68e7b8762887e7592add9986d5e9c
     <Note>
       Removing the key blocks the agent's relayer access, and the memories stay in the account for any other delegate key the user authorizes. Removal is forward-only for encryption: memories saved before removal stay decryptable with Seal keys the agent already fetched, until they're re-encrypted. To cut off every key at once, the owner can [deactivate the account](https://docs.wal.app/walrus-memory/contract/delegate-key-management).
     </Note>
-  </Tab>
-
-  <Tab title="App-Managed Memory">
-    Your app owns one Walrus Memory account and keeps a separate namespace for each Para user. Users don't sign any Sui transactions or hold SUI.
-
-    ### Step 1: Install Dependencies
-
-    <CodeGroup>
-      ```bash npm
-      npm install @mysten-incubation/memwal @mysten/sui @mysten/seal jose
-      ```
-
-      ```bash yarn
-      yarn add @mysten-incubation/memwal @mysten/sui @mysten/seal jose
-      ```
-
-      ```bash pnpm
-      pnpm add @mysten-incubation/memwal @mysten/sui @mysten/seal jose
-      ```
-
-      ```bash bun
-      bun add @mysten-incubation/memwal @mysten/sui @mysten/seal jose
-      ```
-    </CodeGroup>
-
-    ### Step 2: Create an Account and Delegate Key
-
-    Create your app's account and a delegate key once on the [Walrus Memory dashboard](https://memory.walrus.xyz). Store both values as server-side secrets:
-
-    ```bash
-    MEMWAL_PRIVATE_KEY=<delegate-private-key-hex>
-    MEMWAL_ACCOUNT_ID=0x<memwal-account-object-id>
-    ```
-
-    `MEMWAL_ACCOUNT_ID` is the account's object ID, not the address of the wallet that owns it. With the owner address, the relayer rejects every request with `401`.
-
-    ### Step 3: Map Each Para User to a Namespace
-
-    Verify the user's [Para session JWT](https://docs.getpara.com/v3/react/guides/sessions-jwt) on your server, then derive the namespace from the verified user ID. `PARA_API_KEY_ID` is the `aud` claim of your app's session tokens. Decode one to read it:
-
-    ```typescript
-    import { createRemoteJWKSet, jwtVerify } from "jose";
-
-    const PARA_JWKS = createRemoteJWKSet(
-      new URL("https://api.beta.getpara.com/.well-known/jwks.json"), // BETA; use api.getpara.com in PROD
-    );
-
-    // Resolve the Para user from a verified session token, never from the request body
-    async function namespaceFor(paraJwt: string) {
-      const { payload } = await jwtVerify(paraJwt, PARA_JWKS, {
-        audience: process.env.PARA_API_KEY_ID!, // the token's aud claim is your Para API key's ID
-      });
-      return `myapp-${payload.sub}`;
-    }
-    ```
-
-    <Warning>
-      Namespaces organize data. They don't isolate users from each other, because your delegate key can read every namespace in the account. Always derive the namespace from a verified Para session.
-    </Warning>
-
-    ### Step 4: Remember and Recall per User
-
-    ```typescript
-    import { MemWal } from "@mysten-incubation/memwal";
-
-    const memwal = MemWal.create({
-      key: process.env.MEMWAL_PRIVATE_KEY!,
-      accountId: process.env.MEMWAL_ACCOUNT_ID!,
-      serverUrl: "https://relayer.memory.walrus.xyz",
-    });
-
-    const namespace = await namespaceFor(paraJwt); // paraJwt from the request's Authorization header
-
-    await memwal.rememberAndWait("Prefers payouts in USDC on Base.", namespace);
-
-    const { results } = await memwal.recall({
-      query: "What are this user's payout preferences?",
-      namespace,
-      limit: 5,
-    });
-    ```
-
-    For a full multi-user example, see the [multi-tenant cookbook](https://docs.wal.app/walrus-memory/sdk/cookbook-multi-tenant).
   </Tab>
 </Tabs>
 
