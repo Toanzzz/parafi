@@ -1,0 +1,22 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  "files": { "includes": ["**", "!**/dist", "!**/data"] },
+  "formatter": { "indentStyle": "space", "indentWidth": 2 },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "semicolons": "asNeeded",
+      "trailingCommas": "es5"
+    }
+  },
+  "assist": { "actions": { "source": { "organizeImports": "on" } } },
+  "linter": {
+    "rules": { "preset": "recommended", "suspicious": { "noConsole": "error" } }
+  },
+  "overrides": [
+    {
+      "includes": ["apps/agent/src/logger.ts", "**/test/**"],
+      "linter": { "rules": { "suspicious": { "noConsole": "off" } } }
+    }
+  ]
+}

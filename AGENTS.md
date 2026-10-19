@@ -12,6 +12,16 @@
 - Use the Mintlify MCP server, `https://mcp.mintlify.com`, to edit content and settings via MCP
 - Use the Mintlify docs MCP server, `https://www.mintlify.com/docs/mcp`, to query information about using Mintlify via MCP
 
+## Git
+
+- Work and commit directly on `main`. Don't create branches.
+
+## Example app
+
+- `examples/walrus-memory-agent/` validates `walkthroughs/walrus-memory.mdx`. Bun workspace (`apps/web`, `apps/agent`); see its README.
+- Definition of Done there: `bun run check` → `check:types` → `build` → `test`.
+- Ports: 58000 `mint dev`, 58001 web, 58002 agent.
+
 ## Terminology
 
 {/* Add product-specific terms and preferred usage */}

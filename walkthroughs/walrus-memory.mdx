@@ -38,28 +38,19 @@ This walkthrough covers two integration paths: **user-owned memory**, where each
 * **Para SDK** with Sui wallets for your users
 * **Walrus Memory SDK** — `@mysten-incubation/memwal` (beta)
 * **Sui SDK** — `@mysten/sui` v2 and `@mysten/seal`
-* **SUI for gas** (user-owned path only) — the user's Para Sui wallet pays gas for the account and delegate key transactions. Use the [Sui testnet faucet](https://faucet.sui.io) while you build.
+* **SUI for gas** (user-owned path only) — the user's Para Sui wallet pays gas for the account and delegate key transactions, about 0.005 SUI in total. Fund it with at least 0.01 SUI so the gas budget for creating the account fits.
 * **A Walrus Memory relayer** — the [hosted relayer](https://docs.wal.app/walrus-memory/relayer/public-relayer) pays Walrus storage costs, or you can [self-host one](https://docs.wal.app/walrus-memory/relayer/self-hosting)
 
 ## Network Configuration
 
-Use these values for the Walrus Memory contract and hosted relayer. Start on Testnet.
+Use these values for the Walrus Memory contract and hosted relayer on Sui Mainnet.
 
-<CodeGroup>
-  ```bash Testnet
-  SUI_FULLNODE_URL=https://fullnode.testnet.sui.io:443
-  MEMWAL_RELAYER_URL=https://relayer-staging.memory.walrus.xyz
-  MEMWAL_PACKAGE_ID=0x0a625e2db2af6f591a4c80a3d8551ddf11656089cc3a20c5e9e7f8fb75b9265c
-  MEMWAL_REGISTRY_ID=0x736aef9906798fca4460490ccdf8e8502ef170122dc26ecae32111b78c6b42dd
-  ```
-
-  ```bash Mainnet
-  SUI_FULLNODE_URL=https://fullnode.mainnet.sui.io:443
-  MEMWAL_RELAYER_URL=https://relayer.memory.walrus.xyz
-  MEMWAL_PACKAGE_ID=0xe7c16fbea0560e7057e2bf7422feaa4fb313749fc69c9e9092fac7a33b81d7f5
-  MEMWAL_REGISTRY_ID=0x8bf82c9e09e36b8d1c38298f68b7cb68e7b8762887e7592add9986d5e9cf199f
-  ```
-</CodeGroup>
+```bash
+SUI_FULLNODE_URL=https://fullnode.mainnet.sui.io:443
+MEMWAL_RELAYER_URL=https://relayer.memory.walrus.xyz
+MEMWAL_PACKAGE_ID=0xe7c16fbea0560e7057e2bf7422feaa4fb313749fc69c9e9092fac7a33b81d7f5
+MEMWAL_REGISTRY_ID=0x8bf82c9e09e36b8d1c38298f68b7cb68e7b8762887e7592add9986d5e9cf199f
+```
 
 ## Step-by-Step Integration
 
@@ -69,52 +60,47 @@ Use these values for the Walrus Memory contract and hosted relayer. Start on Tes
 
     ### Step 1: Install Dependencies
 
-    ```bash
-    npm install @getpara/react-sdk @mysten-incubation/memwal @mysten/sui @mysten/seal
-    ```
+    <CodeGroup>
+      ```bash npm
+      npm install @getpara/react-sdk @mysten-incubation/memwal @mysten/sui @mysten/seal
+      ```
+
+      ```bash yarn
+      yarn add @getpara/react-sdk @mysten-incubation/memwal @mysten/sui @mysten/seal
+      ```
+
+      ```bash pnpm
+      pnpm add @getpara/react-sdk @mysten-incubation/memwal @mysten/sui @mysten/seal
+      ```
+
+      ```bash bun
+      bun add @getpara/react-sdk @mysten-incubation/memwal @mysten/sui @mysten/seal
+      ```
+    </CodeGroup>
 
     ### Step 2: Initialize Para and Get a Sui Signer
 
     Complete authentication before signing any transactions.
 
-    <CodeGroup>
-      ```typescript Testnet
-      import { ParaWeb } from "@getpara/react-sdk";
-      import { getSuiSigner } from "@getpara/react-sdk/sui/actions";
-      import { SuiGrpcClient } from "@mysten/sui/grpc";
+    ```typescript
+    import { ParaWeb } from "@getpara/react-sdk";
+    import { getSuiSigner } from "@getpara/react-sdk/sui/actions";
+    import { SuiGrpcClient } from "@mysten/sui/grpc";
 
-      // Initialize Para (complete authentication before signing)
-      const para = new ParaWeb("YOUR_PARA_API_KEY");
+    // Initialize Para (complete authentication before signing)
+    const para = new ParaWeb("YOUR_PARA_API_KEY");
 
-      const suiClient = new SuiGrpcClient({
-        network: "testnet",
-        baseUrl: "https://fullnode.testnet.sui.io:443",
-      });
+    const suiClient = new SuiGrpcClient({
+      network: "mainnet",
+      baseUrl: "https://fullnode.mainnet.sui.io:443",
+    });
 
-      // A @mysten/sui Signer backed by the user's Para Sui wallet
-      const signer = await getSuiSigner({ para, client: suiClient });
-      ```
-
-      ```typescript Mainnet
-      import { ParaWeb } from "@getpara/react-sdk";
-      import { getSuiSigner } from "@getpara/react-sdk/sui/actions";
-      import { SuiGrpcClient } from "@mysten/sui/grpc";
-
-      // Initialize Para (complete authentication before signing)
-      const para = new ParaWeb("YOUR_PARA_API_KEY");
-
-      const suiClient = new SuiGrpcClient({
-        network: "mainnet",
-        baseUrl: "https://fullnode.mainnet.sui.io:443",
-      });
-
-      // A @mysten/sui Signer backed by the user's Para Sui wallet
-      const signer = await getSuiSigner({ para, client: suiClient });
-      ```
-    </CodeGroup>
+    // A @mysten/sui Signer backed by the user's Para Sui wallet
+    const signer = await getSuiSigner({ para, client: suiClient });
+    ```
 
     <Tip>
-      In a React component, `useParaSuiSigner({ client: suiClient })` from `@getpara/react-sdk` returns the same signer as `suiSigner`.
+      In a React app, pass the same `para` instance to `ParaProvider` as `paraClientConfig`. Inside components, `useParaSuiSigner({ client: suiClient })` from `@getpara/react-sdk` returns the same signer as `suiSigner`.
     </Tip>
 
     ### Step 3: Adapt the Signer for Walrus Memory
@@ -155,117 +141,62 @@ Use these values for the Walrus Memory contract and hosted relayer. Start on Tes
 
     The user's Para wallet signs both transactions. Pass `suiClient` to each call so the transactions run on the network your client targets.
 
-    <CodeGroup>
-      ```typescript Testnet
-      import { createAccount, addDelegateKey } from "@mysten-incubation/memwal/account";
+    ```typescript
+    import { createAccount, addDelegateKey } from "@mysten-incubation/memwal/account";
 
-      // Walrus Memory contract on Sui Testnet
-      const MEMWAL_PACKAGE_ID = "0x0a625e2db2af6f591a4c80a3d8551ddf11656089cc3a20c5e9e7f8fb75b9265c";
-      const MEMWAL_REGISTRY_ID = "0x736aef9906798fca4460490ccdf8e8502ef170122dc26ecae32111b78c6b42dd";
+    // Walrus Memory contract on Sui
+    const MEMWAL_PACKAGE_ID = "0xe7c16fbea0560e7057e2bf7422feaa4fb313749fc69c9e9092fac7a33b81d7f5";
+    const MEMWAL_REGISTRY_ID = "0x8bf82c9e09e36b8d1c38298f68b7cb68e7b8762887e7592add9986d5e9cf199f";
 
-      // One account per Sui address: run once, then store accountId with the user
-      const { accountId } = await createAccount({
-        packageId: MEMWAL_PACKAGE_ID,
-        registryId: MEMWAL_REGISTRY_ID,
-        walletSigner,
-        suiClient,
-      });
+    // One account per Sui address: run once, then store accountId with the user
+    const { accountId } = await createAccount({
+      packageId: MEMWAL_PACKAGE_ID,
+      registryId: MEMWAL_REGISTRY_ID,
+      walletSigner,
+      suiClient,
+    });
 
-      // Authorize the agent's delegate key to read and write this account's memory
-      await addDelegateKey({
-        packageId: MEMWAL_PACKAGE_ID,
-        registryId: MEMWAL_REGISTRY_ID,
-        accountId,
-        publicKey: agentPublicKey, // from Step 4
-        label: "Payments agent",
-        walletSigner,
-        suiClient,
-      });
-      ```
+    // Authorize the agent's delegate key to read and write this account's memory
+    await addDelegateKey({
+      packageId: MEMWAL_PACKAGE_ID,
+      registryId: MEMWAL_REGISTRY_ID,
+      accountId,
+      publicKey: agentPublicKey, // from Step 4
+      label: "Payments agent",
+      walletSigner,
+      suiClient,
+    });
+    ```
 
-      ```typescript Mainnet
-      import { createAccount, addDelegateKey } from "@mysten-incubation/memwal/account";
-
-      // Walrus Memory contract on Sui Mainnet
-      const MEMWAL_PACKAGE_ID = "0xe7c16fbea0560e7057e2bf7422feaa4fb313749fc69c9e9092fac7a33b81d7f5";
-      const MEMWAL_REGISTRY_ID = "0x8bf82c9e09e36b8d1c38298f68b7cb68e7b8762887e7592add9986d5e9cf199f";
-
-      // One account per Sui address: run once, then store accountId with the user
-      const { accountId } = await createAccount({
-        packageId: MEMWAL_PACKAGE_ID,
-        registryId: MEMWAL_REGISTRY_ID,
-        walletSigner,
-        suiClient,
-      });
-
-      // Authorize the agent's delegate key to read and write this account's memory
-      await addDelegateKey({
-        packageId: MEMWAL_PACKAGE_ID,
-        registryId: MEMWAL_REGISTRY_ID,
-        accountId,
-        publicKey: agentPublicKey, // from Step 4
-        label: "Payments agent",
-        walletSigner,
-        suiClient,
-      });
-      ```
-    </CodeGroup>
-
-    Send `accountId` to your agent backend. Each Sui address can own one account, so a second `createAccount` call for the same user fails. Give each agent its own delegate key, up to 20 per account.
+    Send `accountId` to your agent backend. Each Sui address can own one account, so a second `createAccount` call for the same user fails with abort code `3` (`EAccountAlreadyExists`) before it executes. Give each agent its own delegate key, up to 20 per account.
 
     ### Step 6: Remember and Recall from the Agent
 
     On your agent backend, create a Walrus Memory client with the delegate key and the user's account ID:
 
-    <CodeGroup>
-      ```typescript Testnet
-      import { MemWal } from "@mysten-incubation/memwal";
+    ```typescript
+    import { MemWal } from "@mysten-incubation/memwal";
 
-      const memwal = MemWal.create({
-        key: delegatePrivateKey, // from Step 4
-        accountId, // from Step 5
-        serverUrl: "https://relayer-staging.memory.walrus.xyz", // Testnet relayer
-        namespace: "payments-agent",
-      });
+    const memwal = MemWal.create({
+      key: delegatePrivateKey, // from Step 4
+      accountId, // from Step 5
+      serverUrl: "https://relayer.memory.walrus.xyz",
+      namespace: "payments-agent",
+    });
 
-      // Store a fact the agent learned, and wait until it is on Walrus
-      await memwal.rememberAndWait(
-        "Pays monthly rent of 1,800 USDC to their landlord on the 1st. Asks for confirmation above 500 USDC.",
-      );
+    // Store a fact the agent learned, and wait until it is on Walrus
+    await memwal.rememberAndWait(
+      "Pays monthly rent of 1,800 USDC to their landlord on the 1st. Asks for confirmation above 500 USDC.",
+    );
 
-      // Recall relevant context before the agent acts
-      const { results } = await memwal.recall({
-        query: "What recurring payments and approval rules does this user have?",
-        limit: 5,
-      });
+    // Recall relevant context before the agent acts
+    const { results } = await memwal.recall({
+      query: "What recurring payments and approval rules does this user have?",
+      limit: 5,
+    });
 
-      const context = results.map((memory) => memory.text).join("\n");
-      ```
-
-      ```typescript Mainnet
-      import { MemWal } from "@mysten-incubation/memwal";
-
-      const memwal = MemWal.create({
-        key: delegatePrivateKey, // from Step 4
-        accountId, // from Step 5
-        serverUrl: "https://relayer.memory.walrus.xyz", // Mainnet relayer
-        namespace: "payments-agent",
-      });
-
-      // Store a fact the agent learned, and wait until it is on Walrus
-      await memwal.rememberAndWait(
-        "Pays monthly rent of 1,800 USDC to their landlord on the 1st. Asks for confirmation above 500 USDC.",
-      );
-
-      // Recall relevant context before the agent acts
-      const { results } = await memwal.recall({
-        query: "What recurring payments and approval rules does this user have?",
-        limit: 5,
-      });
-
-      const context = results.map((memory) => memory.text).join("\n");
-      ```
-    </CodeGroup>
+    const context = results.map((memory) => memory.text).join("\n");
+    ```
 
     If you use the Vercel AI SDK, `withMemWal` from `@mysten-incubation/memwal/ai` recalls memories before each generation and saves new facts afterward. See [AI Integration](https://docs.wal.app/walrus-memory/sdk/usage/with-memwal).
 
@@ -300,31 +231,36 @@ Use these values for the Walrus Memory contract and hosted relayer. Start on Tes
 
     ### Step 1: Install Dependencies
 
-    ```bash
-    npm install @mysten-incubation/memwal @mysten/sui @mysten/seal jose
-    ```
-
-    ### Step 2: Create an Account and Delegate Key
-
-    Create your app's account and a delegate key once on the Walrus Memory dashboard for your network. Store both values as server-side secrets:
-
     <CodeGroup>
-      ```bash Testnet
-      # Create both at https://staging.memory.walrus.xyz
-      MEMWAL_PRIVATE_KEY=<delegate-private-key-hex>
-      MEMWAL_ACCOUNT_ID=0x<memwal-account-object-id>
+      ```bash npm
+      npm install @mysten-incubation/memwal @mysten/sui @mysten/seal jose
       ```
 
-      ```bash Mainnet
-      # Create both at https://memory.walrus.xyz
-      MEMWAL_PRIVATE_KEY=<delegate-private-key-hex>
-      MEMWAL_ACCOUNT_ID=0x<memwal-account-object-id>
+      ```bash yarn
+      yarn add @mysten-incubation/memwal @mysten/sui @mysten/seal jose
+      ```
+
+      ```bash pnpm
+      pnpm add @mysten-incubation/memwal @mysten/sui @mysten/seal jose
+      ```
+
+      ```bash bun
+      bun add @mysten-incubation/memwal @mysten/sui @mysten/seal jose
       ```
     </CodeGroup>
 
+    ### Step 2: Create an Account and Delegate Key
+
+    Create your app's account and a delegate key once on the [Walrus Memory dashboard](https://memory.walrus.xyz). Store both values as server-side secrets:
+
+    ```bash
+    MEMWAL_PRIVATE_KEY=<delegate-private-key-hex>
+    MEMWAL_ACCOUNT_ID=0x<memwal-account-object-id>
+    ```
+
     ### Step 3: Map Each Para User to a Namespace
 
-    Verify the user's [Para session JWT](https://docs.getpara.com/v3/react/guides/sessions-jwt) on your server, then derive the namespace from the verified user ID:
+    Verify the user's [Para session JWT](https://docs.getpara.com/v3/react/guides/sessions-jwt) on your server, then derive the namespace from the verified user ID. `PARA_API_KEY_ID` is the `aud` claim of your app's session tokens. Decode one to read it:
 
     ```typescript
     import { createRemoteJWKSet, jwtVerify } from "jose";
@@ -348,47 +284,25 @@ Use these values for the Walrus Memory contract and hosted relayer. Start on Tes
 
     ### Step 4: Remember and Recall per User
 
-    <CodeGroup>
-      ```typescript Testnet
-      import { MemWal } from "@mysten-incubation/memwal";
+    ```typescript
+    import { MemWal } from "@mysten-incubation/memwal";
 
-      const memwal = MemWal.create({
-        key: process.env.MEMWAL_PRIVATE_KEY!,
-        accountId: process.env.MEMWAL_ACCOUNT_ID!,
-        serverUrl: "https://relayer-staging.memory.walrus.xyz", // Testnet relayer
-      });
+    const memwal = MemWal.create({
+      key: process.env.MEMWAL_PRIVATE_KEY!,
+      accountId: process.env.MEMWAL_ACCOUNT_ID!,
+      serverUrl: "https://relayer.memory.walrus.xyz",
+    });
 
-      const namespace = await namespaceFor(paraJwt); // paraJwt from the request's Authorization header
+    const namespace = await namespaceFor(paraJwt); // paraJwt from the request's Authorization header
 
-      await memwal.rememberAndWait("Prefers payouts in USDC on Base.", namespace);
+    await memwal.rememberAndWait("Prefers payouts in USDC on Base.", namespace);
 
-      const { results } = await memwal.recall({
-        query: "What are this user's payout preferences?",
-        namespace,
-        limit: 5,
-      });
-      ```
-
-      ```typescript Mainnet
-      import { MemWal } from "@mysten-incubation/memwal";
-
-      const memwal = MemWal.create({
-        key: process.env.MEMWAL_PRIVATE_KEY!,
-        accountId: process.env.MEMWAL_ACCOUNT_ID!,
-        serverUrl: "https://relayer.memory.walrus.xyz", // Mainnet relayer
-      });
-
-      const namespace = await namespaceFor(paraJwt); // paraJwt from the request's Authorization header
-
-      await memwal.rememberAndWait("Prefers payouts in USDC on Base.", namespace);
-
-      const { results } = await memwal.recall({
-        query: "What are this user's payout preferences?",
-        namespace,
-        limit: 5,
-      });
-      ```
-    </CodeGroup>
+    const { results } = await memwal.recall({
+      query: "What are this user's payout preferences?",
+      namespace,
+      limit: 5,
+    });
+    ```
 
     For a full multi-user example, see the [multi-tenant cookbook](https://docs.wal.app/walrus-memory/sdk/cookbook-multi-tenant).
   </Tab>
