@@ -19,9 +19,31 @@ async function paraWalletSigner() {
   return createWalletSigner(signer, suiClient)
 }
 
-// Guide, Step 5: one account per Sui address; run once, then store accountId with the user
-export async function createMemoryAccount() {
+// Guide, Step 5: read the account ID from the AccountCreated event the owner's address emitted
+async function findAccountId(owner: string) {
+  const query = `{
+    events(last: 1, filter: {
+      type: "${MEMWAL_PACKAGE_ID}::account::AccountCreated",
+      sender: "${owner}"
+    }) { nodes { contents { json } } }
+  }`
+  const { data } = await fetch('https://graphql.mainnet.sui.io/graphql', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ query }),
+  }).then((res) => res.json())
+  return data.events.nodes[0]?.contents.json.account_id as string | undefined
+}
+
+// Guide, Step 5: one account per Sui address; reuse it, or create it once and store accountId with the user
+export async function getOrCreateMemoryAccount(): Promise<{
+  accountId: string
+  digest?: string
+}> {
   const walletSigner = await paraWalletSigner()
+  const accountId = await findAccountId(walletSigner.address)
+  if (accountId) return { accountId }
+
   return createAccount({
     packageId: MEMWAL_PACKAGE_ID,
     registryId: MEMWAL_REGISTRY_ID,

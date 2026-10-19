@@ -3,7 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type Me, type Memory, type Remembered } from '../api'
 import { suiClient } from '../para'
 import { logActivity } from '../store'
-import { authorizeAgent, createMemoryAccount, revokeAgent } from './account'
+import {
+  authorizeAgent,
+  getOrCreateMemoryAccount,
+  revokeAgent,
+} from './account'
 
 export function useMe() {
   const queryClient = useQueryClient()
@@ -65,15 +69,17 @@ export function useSetupMemory() {
         detail: agentPublicKey,
       })
 
-      // Step 5: create the account once, store it with the user, then authorize the agent
+      // Step 5: reuse or create the account, store it with the user, then authorize the agent
       let accountId = me.accountId
       if (!accountId) {
-        const created = await createMemoryAccount()
-        accountId = created.accountId
+        const account = await getOrCreateMemoryAccount()
+        accountId = account.accountId
         logActivity({
-          label: 'Walrus Memory account created',
+          label: account.digest
+            ? 'Walrus Memory account created'
+            : 'Walrus Memory account reused',
           detail: accountId,
-          digest: created.digest,
+          digest: account.digest,
         })
         await api(queryClient, '/account', { accountId })
       }

@@ -31,7 +31,9 @@ This walkthrough covers two integration paths: **app-managed memory**, where you
 
 3. **Fintech Assistants** — Give in-app assistants long-term memory of a customer's goals and preferences, encrypted and owned by the customer's wallet.
 
-4. **Multi-Agent Handoff** — Share one memory account across a support agent, a payments agent, and a back-office job, each with its own revocable delegate key.
+4. **Portable User Memory** — The user's Para wallet owns the memory account and each app or agent is a delegate, so memory follows the user across products instead of staying locked in one.
+
+5. **Multi-Agent Handoff** — Share one memory account across a support agent, a payments agent, and a back-office job, each with its own revocable delegate key.
 
 ## What You Need
 
@@ -39,7 +41,22 @@ This walkthrough covers two integration paths: **app-managed memory**, where you
 * **Walrus Memory SDK** — `@mysten-incubation/memwal` (beta)
 * **Sui SDK** — `@mysten/sui` v2 and `@mysten/seal`
 * **SUI for gas** (user-owned path only) — the user's Para Sui wallet pays gas for the account and delegate key transactions, about 0.005 SUI in total. Fund it with at least 0.01 SUI so the gas budget for creating the account fits.
-* **A Walrus Memory relayer** — the [hosted relayer](https://docs.wal.app/walrus-memory/relayer/public-relayer) pays Walrus storage costs, or you can [self-host one](https://docs.wal.app/walrus-memory/relayer/self-hosting)
+* **A Walrus Memory relayer** — the [hosted relayer](https://docs.wal.app/walrus-memory/relayer/public-relayer) pays Walrus storage costs. The Walrus Foundation runs it as a public good without an SLA, and it can apply usage limits. You can also [self-host one](https://docs.wal.app/walrus-memory/relayer/self-hosting).
+
+## How It Works
+
+| Role | Who holds it | What it does |
+| - | - | - |
+| Owner | Your app, or the user's Para Sui wallet | Owns the memory account onchain. Only the owner can add or remove delegate keys. The default client doesn't need it to remember or recall. |
+| Delegate | Your agent backend | An Ed25519 key the owner registers on the account. Signs every memory request. Needs no SUI or wallet of its own. |
+| Relayer | The Walrus Foundation, or you if you self-host | Embeds each memory, encrypts it with Seal, stores it on Walrus, and pays the storage fees. |
+| Namespace | Your app | A label that groups memories inside one account, such as `payments-agent` or one per user. |
+
+The Sui contract records which keys may use an account, and the relayer verifies the delegate key on every request.
+
+<Warning>
+  The default client sends plaintext to the relayer, which embeds and encrypts it. Keep secrets such as private keys, passwords, and card numbers out of memories. If your compliance model doesn't allow plaintext on the relayer, use the [manual client](https://docs.wal.app/walrus-memory/sdk/usage/memwal-manual) or [self-host the relayer](https://docs.wal.app/walrus-memory/relayer/self-hosting). Namespace names are public onchain, so keep personal data out of them.
+</Warning>
 
 ## Network Configuration
 
@@ -231,6 +248,10 @@ Start with app-managed memory. Choose user-owned memory when users must own thei
     const agentPublicKey = Buffer.from(delegate.publicKey).toString("hex");
     ```
 
+    <Warning>
+      The delegate key is a bearer credential: anyone who holds it can read and write the account's memory until the user removes it. To rotate it, generate a new key, authorize it with `addDelegateKey`, switch the agent to it, then remove the old key (Step 7).
+    </Warning>
+
     ### Step 5: Create the Memory Account and Authorize the Agent
 
     The user's Para wallet signs both transactions. Pass `suiClient` to each call so the transactions run on the network your client targets.
@@ -242,13 +263,33 @@ Start with app-managed memory. Choose user-owned memory when users must own thei
     const MEMWAL_PACKAGE_ID = "0xe7c16fbea0560e7057e2bf7422feaa4fb313749fc69c9e9092fac7a33b81d7f5";
     const MEMWAL_REGISTRY_ID = "0x8bf82c9e09e36b8d1c38298f68b7cb68e7b8762887e7592add9986d5e9cf199f";
 
-    // One account per Sui address: run once, then store accountId with the user
-    const { accountId } = await createAccount({
-      packageId: MEMWAL_PACKAGE_ID,
-      registryId: MEMWAL_REGISTRY_ID,
-      walletSigner,
-      suiClient,
-    });
+    // Read the account ID from the AccountCreated event the owner's address emitted
+    async function findAccountId(owner: string) {
+      const query = `{
+        events(last: 1, filter: {
+          type: "${MEMWAL_PACKAGE_ID}::account::AccountCreated",
+          sender: "${owner}"
+        }) { nodes { contents { json } } }
+      }`;
+      const { data } = await fetch("https://graphql.mainnet.sui.io/graphql", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ query }),
+      }).then((res) => res.json());
+      return data.events.nodes[0]?.contents.json.account_id as string | undefined;
+    }
+
+    // One account per Sui address: reuse it, or create it once and store accountId with the user
+    let accountId = await findAccountId(walletSigner.address);
+    if (!accountId) {
+      const created = await createAccount({
+        packageId: MEMWAL_PACKAGE_ID,
+        registryId: MEMWAL_REGISTRY_ID,
+        walletSigner,
+        suiClient,
+      });
+      accountId = created.accountId;
+    }
 
     // Authorize the agent's delegate key to read and write this account's memory
     await addDelegateKey({
@@ -262,7 +303,11 @@ Start with app-managed memory. Choose user-owned memory when users must own thei
     });
     ```
 
-    Send `accountId` to your agent backend. Each Sui address can own one account, so a second `createAccount` call for the same user fails with abort code `3` (`EAccountAlreadyExists`) before it executes. Give each agent its own delegate key, up to 20 per account.
+    Send `accountId` to your agent backend. Each Sui address can own one account, so `findAccountId` lets a repeat run reuse it. Without the lookup, a second `createAccount` call for the same user fails with abort code `3` (`EAccountAlreadyExists`) before it executes. Give each agent its own delegate key, up to 20 per account.
+
+    <Note>
+      The hosted relayer's `GET /api/accounts/{owner}/exists` answers only `true` or `false`, and its CORS policy allows only the Walrus Memory dashboard. Call it from your server, not the browser.
+    </Note>
 
     ### Step 6: Remember and Recall from the Agent
 
@@ -292,11 +337,13 @@ Start with app-managed memory. Choose user-owned memory when users must own thei
     const context = results.map((memory) => memory.text).join("\n");
     ```
 
-    If you use the Vercel AI SDK, `withMemWal` from `@mysten-incubation/memwal/ai` recalls memories before each generation and saves new facts afterward. See [AI Integration](https://docs.wal.app/walrus-memory/sdk/usage/with-memwal).
+    The client also offers `analyze(text)` to extract separate facts from a longer conversation, `rememberBulk` for up to 20 memories per request, `recall({ query, sort: "recent" })` when the newest match matters more than the closest one, and `health()` to check the relayer.
 
-    <Warning>
-      The default client sends plaintext to the relayer, which embeds and encrypts it. If your compliance model doesn't allow that, use the [manual client](https://docs.wal.app/walrus-memory/sdk/usage/memwal-manual) or [self-host the relayer](https://docs.wal.app/walrus-memory/relayer/self-hosting). Namespace names are public onchain, so keep personal data out of them.
-    </Warning>
+    If you use the Vercel AI SDK, `withMemWal` from `@mysten-incubation/memwal/ai` recalls memories before each generation and saves new facts afterward. See [AI Integration](https://docs.wal.app/walrus-memory/sdk/usage/with-memwal). For MCP clients such as Claude Code, Codex, and Cursor, the [Walrus Memory MCP server](https://docs.wal.app/walrus-memory/mcp/overview) provides tools such as `memwal_remember` and `memwal_recall`, with a delegate key for each client.
+
+    <Note>
+      The [manual client](https://docs.wal.app/walrus-memory/sdk/usage/memwal-manual) signs Seal session keys with a Sui private key or a `walletSigner`. With the user's Para wallet as the `walletSigner`, each `recallManual` call that finds memories creates a new session key, so every recall asks the wallet for a signature.
+    </Note>
 
     ### Step 7: Revoke the Agent
 
