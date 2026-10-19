@@ -16,6 +16,12 @@
           "index",
           "quickstart"
         ]
+      },
+      {
+        "group": "Partner Network",
+        "pages": [
+          "walkthroughs/walrus-memory"
+        ]
       }
     ],
     "global": {
