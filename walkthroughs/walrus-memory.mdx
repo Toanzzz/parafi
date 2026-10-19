@@ -258,6 +258,8 @@ MEMWAL_REGISTRY_ID=0x8bf82c9e09e36b8d1c38298f68b7cb68e7b8762887e7592add9986d5e9c
     MEMWAL_ACCOUNT_ID=0x<memwal-account-object-id>
     ```
 
+    `MEMWAL_ACCOUNT_ID` is the account's object ID, not the address of the wallet that owns it. With the owner address, the relayer rejects every request with `401`.
+
     ### Step 3: Map Each Para User to a Namespace
 
     Verify the user's [Para session JWT](https://docs.getpara.com/v3/react/guides/sessions-jwt) on your server, then derive the namespace from the verified user ID. `PARA_API_KEY_ID` is the `aud` claim of your app's session tokens. Decode one to read it:
