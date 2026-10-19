@@ -11,13 +11,6 @@
   "navigation": {
     "pages": [
       {
-        "group": "Getting Started",
-        "pages": [
-          "index",
-          "quickstart"
-        ]
-      },
-      {
         "group": "Partner Network",
         "pages": [
           "walkthroughs/walrus-memory"
