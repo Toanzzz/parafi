@@ -6,5 +6,6 @@
 drafts/
 *.draft.mdx
 
-# Example apps
-examples/
+# Bun workspace (example apps)
+apps/
+packages/

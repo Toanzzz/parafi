@@ -1,0 +1,23 @@
+{
+  "name": "parafi",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.2",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently --names docs,web,agent --prefix-colors cyan,green,magenta \"mint dev --port 58000\" \"bun run --filter @parafi/web dev\" \"bun run --filter @parafi/agent dev\"",
+    "check": "biome check .",
+    "check:types": "tsc -b",
+    "build": "bun run --filter '*' build",
+    "test": "bun run --filter '*' test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "concurrently": "^10.0.6",
+    "mint": "^4.2.1069",
+    "typescript": "^7.0.2"
+  }
+}

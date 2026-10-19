@@ -16,10 +16,12 @@
 
 - Work and commit directly on `main`. Don't create branches.
 
-## Example app
+## Bun workspace
 
-- `examples/walrus-memory-agent/` validates `walkthroughs/walrus-memory.mdx`. Bun workspace (`apps/web`, `apps/agent`); see its README.
-- Definition of Done there: `bun run check` → `check:types` → `build` → `test`.
+- The root is a Bun workspace (`apps/*`, `packages/*`). `apps/web` and `apps/agent` are the example that validates `walkthroughs/walrus-memory.mdx`; see `README.md`.
+- `bun run dev` runs docs, web, and agent together via `concurrently`.
+- The Mintlify CLI is the local `mint` dev dependency; run it with `bunx mint` (for example `bunx mint broken-links`). There is no global install.
+- Definition of Done: `bun run check` → `check:types` → `build` → `test`.
 - Ports: 58000 `mint dev`, 58001 web, 58002 agent.
 
 ## Terminology
